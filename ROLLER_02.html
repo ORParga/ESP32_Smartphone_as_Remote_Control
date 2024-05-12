@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="es">
+    <!-- 
+        Problemas conocidos 
+        - Al soltar el joystick... algunas veces se queda clavado en lugar de volver al centro
+    -->
+<head>
+    <title>ROLLER</title>
+    <meta charset="utf-8" />
+    <script>
+        //Algunas variables para depurar
+        var requestByJson_count = 0;
+
+        //Variables ROLLER
+        var ESP32_X = 0;
+        var ESP32_Y = 0;
+        var ESP32_X2 = 0;
+        var ESP32_Y2 = 0;
+        var ESP32_MAX_X = 100;
+        var ESP32_MAX_Y = 100;
+
+        var ESP32_LEFTX_DIR = 0
+        var ESP32_LEFTY_DIR = 0
+        var ESP32_RIGHTX_DIR = 0
+        var ESP32_RIGHTY_DIR = 0
+
+        /* Get the documentElement (<html>) to display the page in fullscreen */
+        var elem = document.documentElement;
+
+        //objeto que podremos mover tocandolo
+        var mandoizquierdo ;
+        var ctxMandoIzquierdo;
+        //objeto que podremos pintar tocandolo
+        var mandoderecho;
+        var ctxMandoDerecho;
+
+        //Obtenemos el espacio para mostrar datos de depuracion
+        var RightValueX;
+        var RightValueY;
+        var RightValue2X;
+        var RightValue2Y;
+        var RightValue3;
+        var RightValue4;
+        var LeftValueX;
+        var LeftValueY;
+        var LeftValue2X;
+        var LeftValue2Y;
+        var LeftValue3;
+        var LeftValue4;
+        var MOTOR_LF;
+        var MOTOR_RF;
+        var MOTOR_LB;
+        var MOTOR_RB;
+
+        var buttonFullS;
+        var buttonFullS2;
+
+        var ImFullScreen = 0;
+
+        /* View in fullscreen */
+        function openFullscreen() {
+          if (elem.requestFullscreen) {
+            elem.requestFullscreen();
+          } else if (elem.webkitRequestFullscreen) { /* Safari */
+            elem.webkitRequestFullscreen();
+          } else if (elem.msRequestFullscreen) { /* IE11 */
+            elem.msRequestFullscreen();
+          }
+        }
+        /* Close fullscreen */
+        function closeFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) { /* IE11 */
+                document.msExitFullscreen();
+            }
+        }
+        //function isJsonString(str) {
+        //    try {
+        //        JSON.parse(str);
+        //    } catch (e) {
+        //        return false;
+        //    }
+        //    return true;
+        //}
+
+        // Dibuja un cuadrado de 50x50 con centro en las coordenadas x,y
+        function drawJoystick(context,x,y) 
+        {
+        	var ancho =50;
+        	var alto=50;
+	        context.rect(x-(ancho/2), y-(alto/2), ancho, alto); 
+	        var grd = context.createLinearGradient(0, 0, 0, alto);
+	        grd.addColorStop(0, '#8ED6FF');   
+	        grd.addColorStop(1, '#004CB3');
+	        context.fillStyle = grd;
+	        context.fill();
+	        context.stroke();
+    	};
+
+        //dibuja un eje de ancho 20px que ocupa todo el context de arriba a abajo
+        // opcional x: posicion del eje. Si no se especifica... x= centro del context
+        function drawAxisVertical(context,x)
+        {
+            
+            var ancho =20;
+            var x2=0;
+            if(arguments.length===1){
+                x2=(context.canvas.width/2)-(ancho/2);
+            }
+            else{
+                x2=x-(ancho/2);
+            }
+            //var y2=y-(alto/2);
+            context.fillStyle = "#44DD44";
+            context.fillRect(x2, 0, ancho, context.canvas.height); 
+            context.strokeRect(x2, 0, ancho, context.canvas.height); 
+        }
+        //dibuja un eje de ancho 20px que ocupa todo el context de derecha a izquierda
+        // opcional y: posicion del eje. Si no se especifica... y= centro del context
+        function drawAxisHorizontal(context,y)
+        {
+            var alto =20;
+            var y2=0;
+            if(arguments.length===1){
+                y2=(context.canvas.height/2)-(alto/2);
+            }
+            else{
+                y2=y-(alto/2);
+            }
+            context.fillStyle = "#44DD44";
+            context.fillRect(0, y2, context.canvas.width, alto); 
+            context.strokeRect(0, y2, context.canvas.width, alto); 
+        }
+        function drawJoystickVertical(context,x,y) 
+        {
+        	var ancho =50;
+        	var alto=50;
+            var x2=x-(ancho/2);
+            var y2=y-(alto/2);
+        	context.fillStyle = "#44DDFF";
+    		context.fillRect(x2, y2, ancho, alto); 
+            context.strokeRect(x2, y2, ancho, alto);
+
+            var centerX = context.canvas.width / 2;
+            var centerY = context.canvas.height / 2;
+
+            ESP32_X = Number(((centerX - x) * ESP32_MAX_X / centerX).toFixed(2));
+            if (ESP32_X > ESP32_MAX_X) ESP32_X = ESP32_MAX_X;
+            if (ESP32_X < -ESP32_MAX_X) ESP32_X = -ESP32_MAX_X;
+            if (RightValue2X != null)
+                RightValue2X.innerHTML = ESP32_X;
+
+            ESP32_Y = Number(((centerY - y) * ESP32_MAX_Y / centerY).toFixed(2));
+            if (ESP32_Y > ESP32_MAX_Y) ESP32_Y = ESP32_MAX_Y;
+            if (ESP32_Y < -ESP32_MAX_Y) ESP32_Y = -ESP32_MAX_Y;
+            if (RightValue2Y!=null)
+            RightValue2Y.innerHTML = ESP32_Y;
+            
+    	};
+        function drawJoystickHorizontal(context,x,y) 
+        {
+        	var ancho =50;
+        	var alto=50;
+            var x2=x-(ancho/2);
+            var y2=y-(alto/2);
+        	context.fillStyle = "#44DDFF";
+    		context.fillRect(x2, y2, ancho, alto); 
+            context.strokeRect(x2, y2, ancho, alto);
+
+            var centerX = context.canvas.width / 2;
+            var centerY = context.canvas.height / 2;
+
+            ESP32_X2 = Number(((centerX - x) * ESP32_MAX_X / centerX).toFixed(2));
+            if (ESP32_X2 > ESP32_MAX_X) ESP32_X2 = ESP32_MAX_X;
+            if (ESP32_X2 < -ESP32_MAX_X) ESP32_X2 = -ESP32_MAX_X;
+            if (RightValue2X != null)
+                RightValue2X.innerHTML = ESP32_X2;
+            
+            ESP32_Y2 = Number(((centerY - y) * ESP32_MAX_Y / centerY).toFixed(2));
+            if (ESP32_Y2 > ESP32_MAX_Y) ESP32_Y2 = ESP32_MAX_Y;
+            if (ESP32_Y2 < -ESP32_MAX_Y) ESP32_Y2 = -ESP32_MAX_Y;
+            if (RightValue2Y!=null)
+                RightValue2Y.innerHTML = ESP32_Y2;
+        };
+        function inicializarGlobales() {
+
+            // Obtenemos referencia al objeto que podremos mover tocandolo
+             mandoizquierdo = document.getElementById("MandoIzquierdo");
+             ctxMandoIzquierdo = mandoizquierdo.getContext('2d');
+            //Obtenemos referencia al objeto que podremos pintar tocandolo
+             mandoderecho = document.getElementById('MandoDerecho');
+            ctxMandoDerecho = mandoderecho.getContext('2d');
+
+
+            //Obtenemos el espacio para mostrar datos de depuracion
+             RightValueX = document.getElementById('RightValueX');
+             RightValueY = document.getElementById('RightValueY');
+             RightValue2X = document.getElementById('RightValue2X');
+             RightValue2Y = document.getElementById('RightValue2Y');
+             RightValue3 = document.getElementById('RightValue3');
+             RightValue4 = document.getElementById('RightValue4');
+             LeftValueX = document.getElementById('LeftValueX');
+             LeftValueY = document.getElementById('LeftValueY');
+             LeftValue2X = document.getElementById('LeftValue2X');
+             LeftValue2Y = document.getElementById('LeftValue2Y');
+             LeftValue3 = document.getElementById('LeftValue3');
+            LeftValue4 = document.getElementById('LeftValue4');
+            MOTOR_LF = document.getElementById('MOTOR_LF');
+            MOTOR_RF = document.getElementById('MOTOR_RF');
+            MOTOR_LB = document.getElementById('MOTOR_LB');
+            MOTOR_RB = document.getElementById('MOTOR_RB');
+
+            buttonFullS = document.getElementById('buttonFullS');
+            buttonFullS = document.getElementById('buttonFullS2');
+
+            RightValueX.innerHTML = "0"
+            RightValueY.innerHTML = "0"
+            RightValue2X.innerHTML = "0"
+            RightValue2Y.innerHTML = "0"
+            RightValue3.innerHTML = "0"
+            RightValue4.innerHTML = "0"
+            LeftValueX.innerHTML = "0"
+            LeftValueY.innerHTML = "0"
+            LeftValue2X.innerHTML = "0"
+            LeftValue2Y.innerHTML = "0"
+            LeftValue3.innerHTML = "0"
+            LeftValue4.innerHTML = "0"
+            MOTOR_LF.innerHTML = "0"
+            MOTOR_RF.innerHTML = "0"
+            MOTOR_LB.innerHTML = "0"
+            MOTOR_RB.innerHTML = "0"
+        }
+
+        //Procesamos eventos POST
+
+        function SetCircle(on_off) {
+            if (on_off == 0) {
+                RightValue3.innerHTML = "ON"
+            }
+            else {
+                RightValue3.innerHTML = "OFF"
+            }
+
+        }
+        async function requestByJson() {
+
+            requestByJson_count++;
+            LeftValue2X.innerHTML = requestByJson_count;
+
+            let param = JSON.stringify({ 
+                "ESP32_X": ESP32_X,
+                "ESP32_Y": ESP32_Y,
+                "ESP32_X2": ESP32_X2,
+                "ESP32_Y2": ESP32_Y2 });
+
+            let response = await fetch("/", {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-type': 'application/json'
+                },
+                body: param
+
+            });
+            //LeftValue3.innerHTML = "response" + requestByJson_count;
+            let content = await response.json();
+            //LeftValue4.innerHTML = "response" + content.answer + " - ";
+            if (content.hasOwnProperty("answer")) {
+                LeftValue4.innerHTML = "YES";
+                LeftValue3.innerHTML = content.answer;
+            }
+            else {
+                LeftValue4.innerHTML = "NO";
+            }
+            if (content.hasOwnProperty("LF")) MOTOR_LF.innerHTML = content.LF;
+            else {/*MOTOR_LF.innerHTML = "--";*/}
+            if (content.hasOwnProperty("RF")) MOTOR_RF.innerHTML = content.RF;
+            else {/*MOTOR_RF.innerHTML = "--";*/}
+            if (content.hasOwnProperty("LB")) MOTOR_LB.innerHTML = content.LB;
+            else {/*MOTOR_LB.innerHTML = "--";*/}
+            if (content.hasOwnProperty("RB")) MOTOR_RB.innerHTML = content.RB;
+            else {/*MOTOR_RB.innerHTML = "--";*/}
+            
+        }
+                
+       function inicia()
+       {
+           inicializarGlobales();
+
+            //Evitamos que la pantalla se mueva al tocarla
+            document.addEventListener(
+                'touchmove', function(e) {
+                e.preventDefault();
+                }, { passive:false });
+    
+        //Dibujamos los ejes de los Joysticks
+
+
+        drawAxisHorizontal(ctxMandoDerecho);
+        drawAxisVertical(ctxMandoIzquierdo);
+        //Dibujamos los joysticks en el centro
+           var rMI = mandoizquierdo.getBoundingClientRect();
+           var rMD = mandoderecho.getBoundingClientRect();
+                  var xTouchD=(rMD.width/2);
+                  var yTouchD=(rMD.height/2);
+                  var xTouchI=(rMI.width/2);
+                  var yTouchI=(rMI.height/2);
+            drawJoystickVertical(ctxMandoIzquierdo,xTouchI,yTouchI) ;
+            drawJoystickHorizontal(ctxMandoDerecho,xTouchD,yTouchD) ;
+
+           //Procesamos el evento de fullscreen
+           buttonFullS.addEventListener(
+               'click',
+               function () {
+                   if (ImFullScreen == 0) {
+                       ImFullScreen = 1;
+                       openFullscreen();
+                   }
+                   else {
+                       ImFullScreen = 0;
+                       closeFullscreen();
+                   }
+               });
+
+        //Procesamos el evento de pintar el objeto dibujable
+        mandoizquierdo.addEventListener(
+        'touchmove', function(event) { 
+           //Obtenemos el area cliente del mando izquierdo
+           var rMI = mandoizquierdo.getBoundingClientRect();
+          for (var i = 0; i < event.touches.length; i++) 
+          {
+              var touch1 = event.touches[i]; 
+              if(touch1.target.id==mandoizquierdo.id) 
+              {
+                  var xTouch=(touch1.pageX-rMI.left);
+                  var yTouch=(touch1.pageY-rMI.top);
+					
+                  ctxMandoIzquierdo.beginPath();
+                  ctxMandoIzquierdo.clearRect(
+                  	0, 
+                  	0, 
+                  	ctxMandoIzquierdo.canvas.width, 
+                  	ctxMandoIzquierdo.canvas.height
+                  	);
+                  drawAxisVertical(ctxMandoIzquierdo,xTouch);
+                  drawJoystickVertical(ctxMandoIzquierdo,xTouch,yTouch);
+
+                   LeftValueX.innerHTML =Number(xTouch.toFixed(2));
+                  LeftValueY.innerHTML = Number(yTouch.toFixed(2));
+                  //LeftValue2X.innerHTML = 0;
+                  //LeftValue2Y.innerHTML = 0;
+                  // LeftValue3.innerHTML =0;
+                   //LeftValue4.innerHTML =Number(touch1.force.toFixed(5));
+          } }
+        }, false);    
+
+             //Procesamos el evento de pintar el objeto dibujable
+        mandoderecho.addEventListener(
+        'touchmove', function(event) { 
+           //Obtenemos el area cliente del mando derecho
+           var rMD = mandoderecho.getBoundingClientRect();
+          for (var i = 0; i < event.touches.length; i++) 
+          { 
+              var touch2 = event.touches[i]; 
+              if(touch2.target.id==mandoderecho.id) 
+              {
+                  var xTouch=(touch2.pageX-rMD.left);
+                  var yTouch=(touch2.pageY-rMD.top);
+
+                  ctxMandoDerecho.beginPath();
+                  ctxMandoDerecho.clearRect(
+                  	0, 
+                  	0, 
+                  	ctxMandoDerecho.canvas.width, 
+                  	ctxMandoDerecho.canvas.height
+                  	);
+
+                  drawAxisHorizontal(ctxMandoDerecho,yTouch);
+                  drawJoystickHorizontal(ctxMandoDerecho,xTouch,yTouch);
+
+                   RightValueX.innerHTML =Number(xTouch.toFixed(2));
+                  RightValueY.innerHTML = Number(yTouch.toFixed(2));
+                  //RightValue2X.innerHTML =0;
+                  //RightValue2Y.innerHTML = 0;
+                  // RightValue3.innerHTML =0;
+                   //RightValue4.innerHTML =Number(touch2.force.toFixed(5));
+
+          } }
+        }, false);    
+
+        //Devolvemos los mandos al centro cuando se acaba el movimiento
+        mandoizquierdo.addEventListener(
+        'touchend', function(event) { 
+           //Obtenemos el area cliente del mando izquierdo
+           var rMI = mandoizquierdo.getBoundingClientRect();
+              var touch1 = event.touches[0]; 
+                  var xTouch=(rMI.width/2);
+                  var yTouch=(rMI.height/2);
+
+                  ctxMandoIzquierdo.beginPath();
+                  ctxMandoIzquierdo.clearRect(
+                  	0, 
+                  	0, 
+                  	ctxMandoIzquierdo.canvas.width, 
+                  	ctxMandoIzquierdo.canvas.height
+                  	);
+
+                  drawAxisVertical(ctxMandoIzquierdo,xTouch);
+                  drawJoystickVertical(ctxMandoIzquierdo,xTouch,yTouch);
+
+                   LeftValueX.innerHTML =Number(xTouch.toFixed(2));
+                LeftValueY.innerHTML = Number(yTouch.toFixed(2));
+                //LeftValue2X.innerHTML = 0;
+                //LeftValue2Y.innerHTML = 0;
+                //   LeftValue3.innerHTML =0;
+                 //  LeftValue4.innerHTML =0;
+        }, false); 
+        //Devolvemos los mandos al centro cuando se acaba el movimiento
+        mandoderecho.addEventListener(
+        'touchend', function(event) { 
+           //Obtenemos el area cliente del mando izquierdo
+           var rMD = mandoderecho.getBoundingClientRect();
+              var touch1 = event.touches[0]; 
+                  var xTouch=(rMD.width/2);
+                  var yTouch=(rMD.height/2);
+
+                  ctxMandoDerecho.beginPath();
+                  ctxMandoDerecho.clearRect(
+                  	0, 
+                  	0, 
+                  	ctxMandoDerecho.canvas.width, 
+                  	ctxMandoDerecho.canvas.height
+                  	);
+
+                  drawAxisHorizontal(ctxMandoDerecho,yTouch);
+                  drawJoystickHorizontal(ctxMandoDerecho,xTouch,yTouch);
+
+                   RightValueX.innerHTML =Number(xTouch.toFixed(2));
+                RightValueY.innerHTML = Number(yTouch.toFixed(2));
+                //RightValue2X.innerHTML = 0;
+                //RightValue2Y.innerHTML = 0;
+                //   RightValue3.innerHTML =0;
+                 //  RightValue4.innerHTML =0;
+        }, false); 
+                
+        //Dibujamos el rectangulo cuando se inicia el movimiento
+        mandoderecho.addEventListener(
+        'touchstart', function(event) { 
+           //Obtenemos el area cliente del mando izquierdo
+           var rMD = mandoderecho.getBoundingClientRect();
+              var touch1 = event.touches[0]; 
+                  var xTouch=(touch1.pageX-rMD.left);
+                  var yTouch=(touch1.pageY-rMD.top);
+
+                  ctxMandoDerecho.beginPath();
+                  ctxMandoDerecho.clearRect(
+                  	0, 
+                  	0, 
+                  	ctxMandoDerecho.canvas.width, 
+                  	ctxMandoDerecho.canvas.height
+                  	);
+                  drawAxisHorizontal(ctxMandoDerecho,yTouch);
+                  drawJoystickHorizontal(ctxMandoDerecho,xTouch,yTouch);
+
+                   RightValueX.innerHTML =Number(xTouch.toFixed(2));
+                RightValueY.innerHTML = Number(yTouch.toFixed(2));
+                //RightValue2X.innerHTML = 0;
+                //RightValue2Y.innerHTML = 0;
+                //   RightValue3.innerHTML =0;
+                 //  RightValue4.innerHTML =0;
+        }, false); 
+        //Dibujamos el rectangulo cuando se inicia el movimiento
+        mandoizquierdo.addEventListener(
+        'touchstart', function(event) { 
+           //Obtenemos el area cliente del mando izquierdo
+           var rMI = mandoizquierdo.getBoundingClientRect();
+              var touch1 = event.touches[0]; 
+                  var xTouch=(touch1.pageX-rMI.left);
+                  var yTouch=(touch1.pageY-rMI.top);
+
+                  ctxMandoIzquierdo.beginPath();
+                  ctxMandoIzquierdo.clearRect(
+                  	0, 
+                  	0, 
+                  	ctxMandoIzquierdo.canvas.width, 
+                  	ctxMandoIzquierdo.canvas.height
+                  	);
+
+                  drawAxisVertical(ctxMandoIzquierdo,xTouch);
+                  drawJoystickVertical(ctxMandoIzquierdo,xTouch,yTouch);
+
+                   LeftValueX.innerHTML =Number(xTouch.toFixed(2));
+                LeftValueY.innerHTML = Number(yTouch.toFixed(2));
+                //LeftValue2X.innerHTML = 0;
+                //LeftValue2Y.innerHTML = 0;
+                   //LeftValue3.innerHTML =0;
+                   //LeftValue4.innerHTML =0;
+        }, false); 
+
+
+           //SetCircle(0);
+           //setInterval(requestLedState, 50);
+           setInterval(requestByJson, 100);
+   }
+    </script>
+    
+    <style>
+        .item1 { grid-area: header; }
+        .item2 { grid-area: left; }
+        .item3 { grid-area: main1; }
+        .item4 { grid-area: main2; }
+        .item5 { grid-area: right; }
+
+        .valueZentral { 
+            border: #000 solid 3px;
+             width: 98%;
+             
+            font-size: 15px;
+        }
+        #buttonFullS {
+            background-color: #ff6a00;
+            border: #000 solid 3px;
+            width: 98%;
+            font-size: 15px;
+        }
+        #buttonFullS2 {
+            background-color: #ff6a00;
+            border: #000 solid 3px;
+            width: 98%;
+            font-size: 15px;
+        }
+		.flexi {
+    		display: flex;
+		}
+        #RightValueX {
+            flex: 1;
+        }
+
+        #RightValueY {
+            flex: 1;
+        }
+
+        #RightValue2X {
+            flex: 1;
+        }
+
+        #RightValue2Y {
+            flex: 1;
+        }
+        #LeftValueX {
+            flex: 1;
+        }
+
+        #LeftValueY {
+            flex: 1;
+        }
+
+        #LeftValue2X {
+            flex: 1;
+        }
+
+        #LeftValue2Y {
+            flex: 1;
+        }
+        #LeftValue3 {
+            flex: 1;
+        }
+
+        #LeftValue4 {
+            flex: 1;
+        }
+        #MOTOR_LF {
+            flex: 1;
+        }
+        #MOTOR_RF {
+            flex: 1;
+        }
+        #MOTOR_LB {
+            flex: 1;
+        }
+        #MOTOR_RB {
+            flex: 1;
+        }
+        .grid-container {
+          display: grid;
+          grid-template-areas:
+            'header header header  header header'
+            'left left main1  right right'
+            'left left main2  right right';
+          gap: 10px;
+          background-color: #2196FF;
+          /*padding: 10px;*/
+        }
+
+        .grid-container > div {
+          background-color: rgba(20, 200, 255, 1);
+          text-align: center;
+          /*padding: 20px 0;*/
+          font-size: 30px;
+        }
+
+                .joystick {
+                    font-family: 'Avenir Next LT Pro';
+                    font-weight: bold;
+                    color: #2D3E50;
+                    margin: auto;
+                    border: 5px   outset #00A4BD;
+                    min-height: 150px;
+                    width: 200px;
+                    height: 200px;
+                    background: #FED;
+                    text-align: center;
+                }
+    </style>
+</head>
+    <body onLoad="inicia();">
+
+<div class="grid-container">
+  <div class="item1">ROLLER</div>
+  <div class="item2">
+      <canvas  height="250" style="border: #000 solid 3px; " id="MandoIzquierdo">
+      </canvas>
+  </div>
+  <div class="item3">
+      <div class="flexi">
+          <div class="valueZentral" id="RightValueX">
+              X
+          </div>
+          <div class="valueZentral" id="RightValueY">
+              Y
+          </div>
+      </div>
+      <div class="flexi">
+          <div class="valueZentral" id="RightValue2X">
+              X
+          </div>
+          <div class="valueZentral" id="RightValue2Y">
+              Y
+          </div>
+      </div>
+      <div class="valueZentral" id="RightValue3">
+          la
+      </div>
+      <div class="valueZentral" id="RightValue4">
+          la
+      </div>
+      <div id="buttonFullS">
+          -
+      </div>
+      <div id="buttonFullS2">
+          Toglee fullscreen
+      </div>
+  </div>  
+  <div class="item4">
+      <div  class="flexi" >
+	        <div class="valueZentral" id="LeftValueX">
+	            Ho
+	        </div>    
+	        <div class="valueZentral" id="LeftValueY">
+	            Ho
+	        </div>
+        </div>    
+        <div class="flexi">
+            <div class="valueZentral" id="LeftValue2X">
+                Ho
+            </div>
+            <div class="valueZentral" id="LeftValue2Y">
+                Ho
+            </div>
+        </div>    
+        <div class="flexi">
+            <div class="valueZentral" id="LeftValue3">
+                Ho
+            </div>    
+            <div class="valueZentral" id="MOTOR_LF">
+                Ho
+            </div>    
+            <div class="valueZentral" id="MOTOR_RF">
+                Ho
+            </div>    
+        </div>    
+        <div class="flexi">
+            <div class="valueZentral" id="LeftValue4">
+                Ho
+            </div>    
+            <div class="valueZentral" id="MOTOR_LB">
+                Ho
+            </div>    
+            <div class="valueZentral" id="MOTOR_RB">
+                Ho
+            </div>    
+        </div>    
+    </div>  
+  <div class="item5">
+      <canvas  height="250" style="border: #000 solid 3px; " id="MandoDerecho">
+      </canvas>
+  </div>
+</div>   
+         
+      
+         
+    </body>
+</html>
